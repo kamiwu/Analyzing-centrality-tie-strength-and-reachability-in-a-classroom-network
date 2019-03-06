@@ -1,0 +1,397 @@
+---
+title: "Social Network Analytics Homework 1"
+output:
+  word_document: default
+  pdf_document: default
+  html_notebook: default
+---
+
+Load libraries and data set. 
+
+```{r}
+library(igraph)
+library(dplyr)
+library(gtools)
+
+data <- read.csv('C:/Users/knigh/Downloads/classroom_social_and_task_network.csv')
+```
+
+## Question 1 -- A
+Get valid social tie relationship and plot social tie network. Node 3, 13, 14 are not in the graph because they are isolated, and we need to calculate closeness later so excluding them is a better choice.
+```{r}
+social <- data %>% filter(data$social_tie >0)
+socialm <- cbind(social$ego,social$alter)
+sg <- graph.data.frame(socialm)
+E(sg)$weight <- social$social_tie
+plot.igraph(sg, edge.arrow.size=0.2)
+```
+Calculate indegree, outdegree, closeness, betweenness and eigenvector centrality of social ties.
+<br/>Indegree:
+```{r}
+sgindegree <- degree(sg, v = V(sg), mode = "in")
+sgindegree
+```
+Outdegree:
+```{r}
+sgoutdegree <- degree(sg, v = V(sg), mode = "out")
+sgoutdegree
+```
+Closeness:
+```{r results='hide'}
+sgclose<- closeness(sg, vids = V(sg), mode ="total", normalized = TRUE)
+```
+```{r}
+sgclose
+```
+
+Betweenness:
+```{r}
+sgbetween <- betweenness(sg, v = V(sg), directed = TRUE, normalized = TRUE)
+sgbetween
+```
+Eigenvector centrality:
+```{r results='hide'}
+sgeigen <- eigen_centrality(sg, directed = TRUE)
+sgeigen <- sgeigen[["vector"]]
+```
+```{r}
+sgeigen
+```
+
+Get valid task tie relationship and plot task tie network. Node 3, 12 are not in the graph because they are isolated, and we need to calculate closeness later so excluding them is a better choice.
+```{r}
+task <- data %>% filter(data$task_tie >0)
+taskm <- cbind(task$ego,task$alter)
+tg <- graph.data.frame(taskm)
+E(tg)$weight <- task$task_tie
+plot(tg, edge.arrow.size=0.2)
+```
+Calculate indegree, outdegree, closeness, betweenness and eigenvector centrality of task ties.
+<br/>Indegree:
+```{r}
+tgindegree <- degree(tg, v = V(tg), mode = "in")
+tgindegree
+```
+Outdegree:
+```{r}
+tgoutdegree <- degree(tg, v = V(tg), mode = "out")
+tgoutdegree
+```
+Closeness:
+```{r results='hide'}
+tgclose<- closeness(tg, vids = V(tg), mode ="total", normalized = TRUE)
+```
+```{r}
+tgclose
+```
+
+Betweenness:
+```{r}
+tgbetween <- betweenness(tg, v = V(tg), directed = TRUE, normalized = TRUE)
+tgbetween
+```
+Eigenvector centrality:
+```{r results='hide'}
+tgeigen <- eigen_centrality(tg, directed = TRUE)
+tgeigen <- tgeigen[["vector"]]
+```
+```{r}
+tgeigen
+```
+
+## Question 1 -- B
+Since there're some nodes not in graph, to calculate the correlation, I found the name of nodes in both graphs, and calculate the correlation of these nodes.
+```{r}
+index <- c()
+for (x in 1:22) {
+  if ((x %in% names(tgeigen)) & (x %in% names(sgeigen))) {
+    index <- append(index, x)
+  }
+}
+index <- as.character(index)
+index
+```
+Since there are 3 different algorithms for calculating correlation in R, I used all of them.
+<br />Compute pearson correlation:
+```{r}
+pcin <- cor(sgindegree[index], tgindegree[index])
+pcin
+pcout <- cor(sgoutdegree[index], tgoutdegree[index])
+pcout
+pcclose <- cor(sgclose[index], tgclose[index])
+pcclose
+pcbetween <- cor(sgbetween[index], tgbetween[index])
+pcbetween
+pceigen <- cor(sgeigen[index], tgeigen[index])
+pceigen
+which.max(c(pcin,pcout,pcclose,pcbetween,pceigen))
+```
+Compute kendall correlation:
+```{r}
+kcin <- cor(sgindegree[index], tgindegree[index], method = "kendall")
+kcin
+kcout <- cor(sgoutdegree[index], tgoutdegree[index], method = "kendall")
+kcout
+kcclose <- cor(sgclose[index], tgclose[index], method = "kendall")
+kcclose
+kcbetween <- cor(sgbetween[index], tgbetween[index], method = "kendall")
+kcbetween
+kceigen <- cor(sgeigen[index], tgeigen[index], method = "kendall")
+kceigen
+which.max(c(kcin,kcout,kcclose,kcbetween,kceigen))
+```
+Compute spearman correlation:
+```{r}
+scin <- cor(sgindegree[index], tgindegree[index], method = "spearman")
+scin
+scout <- cor(sgoutdegree[index], tgoutdegree[index], method = "spearman")
+scout
+scclose <- cor(sgclose[index], tgclose[index], method = "spearman")
+scclose
+scbetween <- cor(sgbetween[index], tgbetween[index], method = "spearman")
+scbetween
+sceigen <- cor(sgeigen[index], tgeigen[index], method = "spearman")
+sceigen
+which.max(c(scin,scout,scclose,scbetween,sceigen))
+```
+When using pearson correlation, the betweenness of the two networks has the highest correlation, the values of betweenness in the two networks are dominated by the node 22, which indicates node 22 is very important in bridging other people both in social tie network and task tie network.
+<br />When using kendall & spearman correlation, the outdegree of the two networks has the highest correlation, which indicates each node tend to have similar number of adjacent nodes in the social tie and task tie network.
+
+## Question 2 -- A
+Create a new table with seperate edges of two ties.
+```{r}
+both <- data %>% filter(data$social_tie >0 | data$task_tie>0)
+library(tidyr)
+both <- gather(both, key = 'type', value = 'value', social_tie:task_tie)
+both <- both %>% filter(both$value>0)
+```
+Calculate mean and median of two types of ties.
+```{r}
+meansocial <- mean(both[both$type == "social_tie",]$value)
+meantask <- mean(both[both$type == "task_tie",]$value)
+mediansocial <- median(both[both$type == "social_tie",]$value)
+mediantask <- median(both[both$type == "task_tie",]$value)
+```
+See which tie is strong based on the mean of weights.
+```{r}
+sstrong <- both %>% filter(type == "social_tie") %>% mutate(strong = (value > meansocial))
+tstrong <- both %>% filter(type == "task_tie") %>% mutate(strong = (value > meantask))
+```
+### (1) Visually: 
+Plot the netwotk and set strong edges as blue, weak edges as grey. 
+<br/>This graph can indicate if the nodes satisfy the Strong Triadic Closure, because if we see a node has 2 blue edges, then if the two nodes it connect to don't have ties, then this pair is a violation of the Strong Triadic Closure.
+```{r}
+sw <- c(sstrong$strong, tstrong$strong)
+sw[sw == TRUE] = "blue"
+sw[sw == FALSE] = "grey"
+
+bothm <- cbind(both$ego,both$alter)
+bothg <- graph.data.frame(bothm,directed = TRUE)
+E(bothg)$weight <- both$value
+plot.igraph(bothg, edge.arrow.size=0.2, edge.color=sw, vertex.size = 15, edge.curved = TRUE)
+```
+### (2) Programmatically
+Combine two types of ties together, and build a matrix with all types of ties.
+```{r}
+combine <- rbind(sstrong, tstrong)
+strongmean <- combine$strong # extract values for question 3
+combinesort <- combine[order(combine$ego),]
+all <- cbind(combine$ego,combine$alter)
+allg <- graph_from_edgelist(all)
+allgm <-  as_adj(allg)
+```
+Extract strong ties and make an matrix only with strong ties.
+```{r}
+combines <- combinesort %>% filter(combinesort$strong == TRUE)
+combinese <- cbind(combines$ego,combines$alter)
+combineg <- graph_from_edgelist(combinese)
+combinegm <-  as_adj(combineg)
+```
+Build for loops and if statements to find which node has more than two strong ties from strong-ties matrix, extract the index of the strong ties and use combinations to find unique pairs of two nodes. Then these pairs of nodes should have ties based on the Strong Triadic Closure, so then find if these pairs have ties from all-ties matrix. If the number is zero from all-ties matrix, it means there's no tie there, then this pair is a violation and a count needs to be added.
+```{r}
+number <- 0
+stc <- data.frame()
+
+for (i in 1:22) {
+  if (sum(combinegm[i,] > 0) > 1) {
+    n <- which((combinegm[i,]) > 0)
+    agent <- stc
+    stc <- combinations(n=length(n), r=2, v=n)
+    stc <- rbind(agent, stc)
+  } 
+}
+
+for (i in 1:22) {
+  if (sum(combinegm[,i] > 0) > 1) {
+    n <- which((combinegm[,i]) > 0)
+    agent <- stc
+    stc <- combinations(n=length(n), r=2, v=n)
+    stc <- rbind(agent, stc)
+  } 
+}
+
+stc <- stc[order(stc$V1,stc$V2),]
+stc <- stc[!duplicated(stc[,1:2]),]
+
+for (j in 1:(length(stc$V1))) {
+      if ((allgm[stc[j,1],stc[j,2]] == 0) | (allgm[stc[j,2],stc[j,1]] == 0)) {
+        number <- number +1
+      }
+    }
+
+number
+```
+The outcome shows there are 18 ties that are violation of Strong Triadic Closure, so the network doesn't satisfy the Strong Triadic Closure.
+
+## Question 2 -- B
+See which tie is strong based on the median of weights.
+```{r}
+sstrong <- both %>% filter(type == "social_tie") %>% mutate(strong = (value > mediansocial))
+tstrong <- both %>% filter(type == "task_tie") %>% mutate(strong = (value > mediantask))
+```
+Use the same programmatical method in the last question to check if the graph violate the Strong Triadic Closure or not.
+```{r}
+combine <- rbind(sstrong, tstrong)
+strongmedian <- combine$strong # extract values for question 3
+combinesort <- combine[order(combine$ego),]
+all <- cbind(combine$ego,combine$alter)
+allg <- graph_from_edgelist(all)
+allgm <-  as_adj(allg)
+
+combines <- combinesort %>% filter(combinesort$strong == TRUE)
+combinese <- cbind(combines$ego,combines$alter)
+combineg <- graph_from_edgelist(combinese)
+combinegm <-  as_adj(combineg)
+
+number <- 0
+stc <- data.frame()
+
+for (i in 1:22) {
+  if (sum(combinegm[i,] > 0) > 1) {
+    n <- which((combinegm[i,]) > 0)
+    agent <- stc
+    stc <- combinations(n=length(n), r=2, v=n)
+    stc <- rbind(agent, stc)
+  } 
+}
+
+for (i in 1:22) {
+  if (sum(combinegm[,i] > 0) > 1) {
+    n <- which((combinegm[,i]) > 0)
+    agent <- stc
+    stc <- combinations(n=length(n), r=2, v=n)
+    stc <- rbind(agent, stc)
+  } 
+}
+
+stc <- stc[order(stc$V1,stc$V2),]
+stc <- stc[!duplicated(stc[,1:2]),]
+
+for (j in 1:(length(stc$V1))) {
+  if ((allgm[stc[j,1],stc[j,2]] == 0) | (allgm[stc[j,2],stc[j,1]] == 0)) {
+    number <- number +1
+  }
+}
+
+number > 0
+```
+The outcome shows that the number of the violation of the Strong Triadic Closure is above 0, so the network doesn't satisfy the Strong Triadic Closure. 
+<br/>From the plot and the number of the violation of the Strong Triadic Closure, we can find that this network has less strong triadic closures, which means there are less clusters in this network, and there are some strong brokers in this network which connect to lots of other nodes and have information from multipul parties (like node 22). The information transmission would be harder in this network, because some nodes have limited sources of information.
+
+## Question 3 -- A
+Calculate the edge-level betweenness for the 2 types of tie.
+<br/>Edge-level betweenness of social ties:
+```{r}
+socialeb <- edge_betweenness(sg, e = E(sg), directed = TRUE)
+socialeb
+```
+Edge-level betweenness of task ties:
+```{r}
+taskeb <- edge_betweenness(tg, e = E(tg), directed = TRUE)
+taskeb
+```
+
+## Question 3 -- B
+Compute the edge betweenness of social ties and task ties.
+```{r}
+strongmean[strongmean == TRUE] = "Strong"
+strongmean[strongmean == FALSE] = "Weak"
+strongmedian[strongmedian == TRUE] = "Strong"
+strongmedian[strongmedian == FALSE] = "Weak"
+compare <- cbind(strongmean, strongmedian, edge_betweenness = c(socialeb, taskeb))
+```
+I compute the mean of edge betweenness when the ties are strong and weak respectively, and try to see if the edge betweenness is genrally high under which circumstances.
+<br/>The mean of edge betweenness when ties are strong (based on the mean of weight):
+```{r}
+mean(as.integer(compare[,'edge_betweenness'][compare[,'strongmean'] == 'Strong']))
+```
+The mean of edge betweenness when ties are weak (based on the mean of weight):
+```{r}
+mean(as.integer(compare[,'edge_betweenness'][compare[,'strongmean'] == 'Weak']))
+```
+The mean of edge betweenness when ties are strong (based on the median of weight):
+```{r}
+mean(as.integer(compare[,'edge_betweenness'][compare[,'strongmedian'] == 'Strong']))
+```
+The mean of edge betweenness when ties are weak (based on the median of weight):
+```{r}
+mean(as.integer(compare[,'edge_betweenness'][compare[,'strongmedian'] == 'Weak']))
+```
+The mean of edge betweenness of weak ties is higher than that of strong ties. So it turns out edges with high betweenness tend to be weak ties. It makes sense because an edge with high betweenness is a bridge which connect two unfamiliar groups. If a high-betweenness edge is a strong tie, then based on the Strong Triadic Closure, the two groups should have some edges between them, then that edge wouldn't have very high betweenness.
+
+## Qeustion 4
+Build the adjacency matrix of all ties, mutiply the matrix by itself for 20 times (because node 3 is not in the matrix), and find positions of 0 in each matrix. This will tell us if there exists a shortest path of 1 to 20 between 2 nodes, if it's 0 it means there's no shortest path. The positions must be duplicated, if the number of duplications is 20, it means in every matrix the pair of nodes is 0, which means there's no walks at all between the pair.
+```{r}
+adjmatrix <- as_adjacency_matrix(bothg, type = "both", names = TRUE, sparse = FALSE)
+
+library(expm)
+count <- c()
+for (i in 1:(nrow(adjmatrix)-1)) {
+  matrix <- adjmatrix %^% i
+  for (j in 1:nrow(adjmatrix)) {
+    for (k in 1:nrow(adjmatrix)) {
+      if ((matrix[j,k] == 0) & (matrix[k,j] == 0)) {
+        count <- rbind(count,c(j,k))
+      }
+    }
+  }}
+count <- count[order(count[,1], count[,2]),]
+colnames(count) <- c("a","b")
+count <- as.data.frame(count)
+number <-summarise(group_by(count,a,b),length(b))
+sum(number$`length(b)` == (nrow(adjmatrix)-1))
+```
+The number is 76, so there are 76 pairs of nodes do not have walks between one another. 
+<br/>It's worth mentioning that since our network is directed, so I think if node A to node B don't have walks, and node B to node A don't have walks, then they are two different pairs.
+
+## Question 5
+A network with network-level degree centrality equals 1. Such kind of network has one central node connecting other nodes, but other nodes don't connect with each other.
+```{r}
+one <- graph_from_literal(A---B, A---C, A---D, A---E)
+plot(one)
+```
+A network with network-level degree centrality equals 0. Such kind of network has every node conncect to each other.
+```{r}
+zero <- graph_from_literal(A---B, A---C, A---D,A---E,B---C,B---D,B---E,C---D,C---E,D---E)
+plot(zero)
+```
+Plot the degree distribution of 1 network-level degree centrality and the degree distribution of 0 network-level degree centrality, respectively. 
+<br/>The degree distribution of 1 network-level degree centrality has 1 high value and several low value, while the degree distribution of 0 network-level degree centrality has every variable as same value.
+```{r}
+par(mfrow=c(1,2))
+hist(degree(one))
+hist(degree(zero))
+```
+Plot the closeness distribution of 1 network-level degree centrality and the closeness distribution of 0 network-level degree centrality, respectively. The distribution looks pretty similar to degree distribution.
+```{r}
+par(mfrow=c(1,2))
+hist(closeness(one))
+hist(closeness(zero))
+```
+Plot the betweenness distribution of 1 network-level degree centrality and the betweenness distribution of 0 network-level degree centrality, respectively. The distribution looks pretty similar to degree distribution.
+```{r}
+par(mfrow=c(1,2))
+hist(betweenness(one))
+hist(betweenness(zero))
+```
+From my experiment, I think the relationship hold true for other measures of centrality.
